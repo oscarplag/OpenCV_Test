@@ -13,6 +13,7 @@
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/nonfree/nonfree.hpp>
 
+//#define DISPLAY_IMAGES
 
 using namespace cv;
 using namespace std;
@@ -37,12 +38,20 @@ int HomographyTest();
 void MatchFeaturesSurf(Mat& img_object, Mat& img_scene);
 void MatchFeaturesSift(Mat& img_object, Mat& img_scene);
 
+int BilatTest();
+
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-	return HomographyTest();
-	//return BilatCanny();
-	//return diffFilters();
+	//HomographyTest();
+	
+
+	BilatTest();
+	//BilatCanny();
+	//BilatCannyGPU();
+	//diffFilters();
+
+	return 0;
 }
 
 int HomographyTest()
@@ -246,7 +255,7 @@ void MatchFeaturesSift(Mat& img_object, Mat& img_scene)
 
 int BilatCannyGPU()
 {
-
+	Mat tmp;
 	Mat imgOrig = imread("corrected.png", CV_LOAD_IMAGE_GRAYSCALE);
 	if(! imgOrig.data )                              // Check for invalid input
 	{
@@ -254,27 +263,29 @@ int BilatCannyGPU()
 		return -1;
 	}
 	resize(imgOrig, imgOrig, Size(imgOrig.cols/4, imgOrig.rows/4)); // resized to half size
-	
-	gpu::GpuMat img(imgOrig);	
+	gpu::GpuMat img(imgOrig);
 	namedWindow( "Original Image", CV_WINDOW_AUTOSIZE  );
-	imshow("Original Image",img);
+	img.download(tmp);
+	imshow("Original Image",tmp);
 
 	gpu::GpuMat bilat;	
 	gpu::bilateralFilter ( img, bilat, 10, 20, 5 );
 	namedWindow("Bilater Filtered Image",CV_WINDOW_AUTOSIZE);
-	imshow("Bilater Filtered Image",bilat);
+	bilat.download(tmp);
+	imshow("Bilater Filtered Image",tmp);
 
 	gpu::GpuMat canOrig;
 	int canThresh = 20;
 	gpu::Canny(img,canOrig,canThresh,3*canThresh);
 	namedWindow("Canny Filtered Image",CV_WINDOW_AUTOSIZE);
-	imshow("Canny Filtered Image",canOrig);
+	canOrig.download(tmp);
+	imshow("Canny Filtered Image",tmp);
 
 	gpu::GpuMat canIm;	
 	gpu::Canny(bilat,canIm,canThresh,canThresh*3);
 	namedWindow("Bilateral-Canny Filtered Image",CV_WINDOW_AUTOSIZE);
-	imshow("Bilateral-Canny Filtered Image",canIm);	
-
+	canIm.download(tmp);
+	imshow("Bilateral-Canny Filtered Image",tmp);	
 	waitKey(0);
 
 	return 0;
@@ -307,7 +318,6 @@ int BilatCanny()
 	Canny(bilat,canIm,canThresh,canThresh*3);
 	namedWindow("Bilateral-Canny Filtered Image",CV_WINDOW_AUTOSIZE);
 	imshow("Bilateral-Canny Filtered Image",canIm);	
-
 	waitKey(0);
 
 	return 0;
@@ -385,5 +395,43 @@ int display_dst( int delay )
 	imshow( window_name, dst );
 	int c = waitKey ( delay );
 	if( c >= 0 ) { return -1; }
+	return 0;
+}
+
+int BilatTest()
+{
+	::LARGE_INTEGER freq,t1,t2,t3,t4;
+	::QueryPerformanceFrequency(&freq);
+
+	Mat img = imread("corrected.png", CV_LOAD_IMAGE_GRAYSCALE);
+	if(! img.data )                              // Check for invalid input
+	{
+		cout <<  "Could not open or find the image" << std::endl ;
+		return -1;
+	}
+	gpu::GpuMat imgGPU(img);
+	int canThresh = 20;
+
+	Mat bilat, canOrig, canIm;
+	gpu::GpuMat bilatGPU, canOrigGPU, canImGPU;	
+
+	::QueryPerformanceCounter(&t1);
+	bilateralFilter ( img, bilat, 10, 20, 5 );
+	Canny(img,canOrig,canThresh,3*canThresh);
+	Canny(bilat,canIm,canThresh,canThresh*3);
+	::QueryPerformanceCounter(&t2);
+	::QueryPerformanceCounter(&t3);
+	gpu::bilateralFilter ( imgGPU, bilatGPU, 10, 20, 5 );
+	gpu::Canny(imgGPU,canOrigGPU,canThresh,3*canThresh);
+	gpu::Canny(bilatGPU,canImGPU,canThresh,canThresh*3);
+	::QueryPerformanceCounter(&t4);
+
+	double elapsedTime = (t2.QuadPart - t1.QuadPart) * 1000.0/ freq.QuadPart;
+	double elapsedTime2 = (t4.QuadPart - t3.QuadPart) * 1000.0/ freq.QuadPart;
+
+	printf("CPU version execution time: %fms\n",elapsedTime);
+	printf("GPU version execution time: %fms\n",elapsedTime2);	
+
+	waitKey(0);
 	return 0;
 }
