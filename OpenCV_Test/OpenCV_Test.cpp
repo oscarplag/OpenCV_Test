@@ -15,6 +15,7 @@
 
 #define RESIZE
 #define DISPLAY_IMAGES
+//#define GPU
 
 using namespace cv;
 using namespace std;
@@ -169,13 +170,17 @@ int HomographyTest()
 	resize(img_object, img_object, Size(img_object.cols/4, img_object.rows/4));
 	resize(img_scene_orig, img_scene_orig, Size(img_scene_orig.cols/4, img_scene_orig.rows/4));
 #endif
+
+#ifdef GPU
 	gpu::GpuMat img_object_GPU(img_object);
 	gpu::GpuMat img_scene_orig_GPU(img_scene_orig);
-	Mat img_scene;
-	bilateralFilter(img_scene_orig, img_scene, 5, 10, 3 );
 	gpu::GpuMat img_scene_GPU;
 	gpu::bilateralFilter(img_scene_orig_GPU,img_scene_GPU,5,10,3);
 
+#endif
+	Mat img_scene;
+	bilateralFilter(img_scene_orig, img_scene, 5, 10, 3 );
+	
 
 	Mat descriptors_object, descriptors_scene;
 
@@ -189,17 +194,23 @@ int HomographyTest()
 	::QueryPerformanceCounter(&t1);
 	MatchFeaturesSurf(img_object,img_scene,matches_surf);
 	::QueryPerformanceCounter(&t2);
+#ifdef GPU
 	MatchFeaturesORB_GPU(img_object_GPU,img_scene_GPU,matches_orb);
+#endif
 	::QueryPerformanceCounter(&t3);
 	MatchFeaturesSift(img_object,img_scene,matches_sift);
 	::QueryPerformanceCounter(&t4);
 
 	double elapsedTime = (t2.QuadPart - t1.QuadPart) * 1000.0/ freq.QuadPart;
+#ifdef GPU
 	double elapsedTime2 = (t3.QuadPart - t2.QuadPart) * 1000.0/ freq.QuadPart;
+#endif
 	double elapsedTime3 = (t4.QuadPart - t3.QuadPart) * 1000.0/ freq.QuadPart;
 
 	printf("Surf took: %fms\n",elapsedTime);
+#ifdef GPU
 	printf("Orb (GPU) took: %fms\n",elapsedTime2);
+#endif
 	printf("Sift took: %fms\n",elapsedTime3);
 
 #ifdef DISPLAY_IMAGES
@@ -208,9 +219,10 @@ int HomographyTest()
 
 	namedWindow("Sift Matches",WINDOW_AUTOSIZE);
 	imshow( "Sift Matches", matches_sift );
-
+#ifdef GPU
 	namedWindow("Orb Matches (GPU)",WINDOW_AUTOSIZE);
 	imshow("Orb Matches (GPU)", matches_orb );
+#endif
 #endif
 
 	waitKey(0);
